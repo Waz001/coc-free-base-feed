@@ -1,0 +1,17 @@
+name: Test Discord Webhook
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send test message to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          curl -H "Content-Type: application/json" \
+            -d '{"username":"Free Base Feed","content":":european_castle: **Free Base Feed is online!**\n\nGitHub → Discord connection successful. :white_check_mark:"}' \
+            "$WEBHOOK_URL"
