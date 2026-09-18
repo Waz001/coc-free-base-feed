@@ -1,0 +1,134 @@
+name: JAGRUK Free Base Feed
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jagruk-feed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check JAGRUK and post bases
+        env:
+          X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import json
+          import urllib.request
+          import urllib.parse
+
+          TOKEN = os.environ["X_BEARER_TOKEN"]
+          WEBHOOK = os.environ["DISCORD_WEBHOOK_URL"]
+
+          def x_get(url):
+              req = urllib.request.Request(
+                  url,
+                  headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "User-Agent": "MF-Buds-Free-Base-Feed"
+                  }
+              )
+              with urllib.request.urlopen(req, timeout=30) as r:
+                  return json.loads(r.read().decode())
+
+          # Find JAGRUK
+          user = x_get(
+              "https://api.x.com/2/users/by/username/jagruk00"
+          )
+
+          user_id = user["data"]["id"]
+
+          # Get latest 5 original posts
+          result = x_get(
+              f"https://api.x.com/2/users/{user_id}/tweets"
+              "?max_results=5"
+              "&exclude=retweets,replies"
+              "&tweet.fields=created_at,entities"
+          )
+
+          tweets = result.get("data", [])
+
+          found = None
+
+          # Find newest post containing Clash layout links
+          for tweet in tweets:
+              clash_links = []
+
+              for url in tweet.get("entities", {}).get("urls", []):
+                  expanded = url.get("expanded_url", "")
+                  unwound = url.get("unwound_url", "")
+
+                  candidate = unwound or expanded
+
+                  if "link.clashofclans.com" in candidate:
+                      clash_links.append(candidate)
+
+              # Also check URLs written directly in text
+              text = tweet.get("text", "")
+
+              if clash_links:
+                  found = (tweet, clash_links)
+                  break
+
+          if not found:
+              print("No Clash of Clans layout post found in latest 5 posts.")
+              raise SystemExit(0)
+
+          tweet, links = found
+
+          # Remove duplicate links
+          links = list(dict.fromkeys(links))
+
+          tweet_id = tweet["id"]
+          text = tweet.get("text", "").strip()
+
+          # Keep the first useful line as the release title
+          lines = [
+              line.strip()
+              for line in text.splitlines()
+              if line.strip()
+          ]
+
+          title = lines[0] if lines else "New JAGRUK Free Bases"
+
+          # Discord message
+          message = (
+              ":european_castle: **New Free Bases — JAGRUK**\n\n"
+              f"**{title}**\n\n"
+          )
+
+          for i, link in enumerate(links, 1):
+              message += f"**Base {i}:** {link}\n"
+
+          message += (
+              "\n"
+              f"**Original post:** https://x.com/jagruk00/status/{tweet_id}"
+          )
+
+          payload = {
+              "username": "Free Base Feed",
+              "content": message
+          }
+
+          data = json.dumps(payload).encode()
+
+          req = urllib.request.Request(
+              WEBHOOK,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST"
+          )
+
+          with urllib.request.urlopen(req, timeout=30) as r:
+              print("Discord response:", r.status)
+
+          print()
+          print("SUCCESS")
+          print("Posted JAGRUK release:", tweet_id)
+          print("Clash links:", len(links))
+          PY
