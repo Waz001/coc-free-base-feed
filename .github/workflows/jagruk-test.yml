@@ -1,0 +1,61 @@
+name: Test JAGRUK Feed
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-jagruk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch JAGRUK public feed
+        run: |
+          python3 - <<'PY'
+          import re
+          import urllib.request
+
+          URL = "https://twstalker.com/jagruk00"
+
+          req = urllib.request.Request(
+              URL,
+              headers={"User-Agent": "Mozilla/5.0"}
+          )
+
+          try:
+              html = urllib.request.urlopen(req, timeout=20).read().decode(
+                  "utf-8", errors="ignore"
+              )
+          except Exception as e:
+              print(":x: Could not fetch JAGRUK feed:")
+              print(e)
+              raise SystemExit(1)
+
+          print(":white_check_mark: JAGRUK feed downloaded")
+          print(f"Downloaded {len(html):,} characters")
+
+          # Find Clash of Clans layout URLs
+          links = re.findall(
+              r'https?://link\.clashofclans\.com[^"\'<>\s]+',
+              html
+          )
+
+          # Clean duplicates while preserving order
+          unique = []
+          for link in links:
+              link = link.replace("&amp;", "&")
+              if link not in unique:
+                  unique.append(link)
+
+          print()
+          print(f":european_castle: Found {len(unique)} unique Clash layout links")
+          print()
+
+          for number, link in enumerate(unique[:20], 1):
+              print(f"Base {number}")
+              print(link)
+              print("-" * 60)
+
+          if not unique:
+              print(":warning: Feed loaded, but no direct Clash layout URLs were found.")
+              print("This means we'll need a different extraction method.")
+          PY
