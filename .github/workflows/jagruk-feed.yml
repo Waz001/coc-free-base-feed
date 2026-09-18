@@ -116,12 +116,6 @@ jobs:
 
               payload = {
                   "username": "Free Base Feed",
-
-                  # 4 = SUPPRESS_EMBEDS
-                  # Links remain clickable, but Discord does
-                  # not generate the huge website previews.
-                  "flags": 4,
-
                   "content": message
               }
 
@@ -365,13 +359,13 @@ jobs:
 
                       message += (
                           f"**{names[index]}**\n"
-                          f"{clash_link}\n\n"
+                          f"<{clash_link}>\n\n"
                       )
 
                   else:
 
                       message += (
-                          f"{clash_link}\n\n"
+                          f"<{clash_link}>\n\n"
                       )
 
 
@@ -387,7 +381,7 @@ jobs:
 
               message += (
                   "🔗 **Original X post:** "
-                  f"{original_url}"
+                  f"<{original_url}>"
               )
 
 
