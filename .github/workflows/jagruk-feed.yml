@@ -58,6 +58,10 @@ jobs:
                   "username": "jagruk00",
                   "name": "JAGRUK"
               },
+              {
+                  "username": "archetype_bb",
+                  "name": "Archetype Base Building"
+              },
           ]
 
 
