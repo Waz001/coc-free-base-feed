@@ -15,15 +15,21 @@ jobs:
         env:
           X_BEARER_TOKEN: ${{ secrets.X_BEARER_TOKEN }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+
         run: |
           python3 - <<'PY'
           import os
           import json
           import urllib.request
           import urllib.parse
+          import urllib.error
 
           TOKEN = os.environ["X_BEARER_TOKEN"]
           WEBHOOK = os.environ["DISCORD_WEBHOOK_URL"]
+
+          # ----------------------------------------
+          # GET DATA FROM X
+          # ----------------------------------------
 
           def x_get(url):
               req = urllib.request.Request(
@@ -33,17 +39,28 @@ jobs:
                       "User-Agent": "MF-Buds-Free-Base-Feed"
                   }
               )
-              with urllib.request.urlopen(req, timeout=30) as r:
-                  return json.loads(r.read().decode())
 
-          # Find JAGRUK
+              with urllib.request.urlopen(req, timeout=30) as response:
+                  return json.loads(response.read().decode())
+
+
+          print("Connecting to X API...")
+
+          # Find JAGRUK's X user ID
           user = x_get(
               "https://api.x.com/2/users/by/username/jagruk00"
           )
 
           user_id = user["data"]["id"]
 
-          # Get latest 5 original posts
+          print("Found JAGRUK")
+          print("User ID:", user_id)
+
+
+          # ----------------------------------------
+          # GET RECENT JAGRUK POSTS
+          # ----------------------------------------
+
           result = x_get(
               f"https://api.x.com/2/users/{user_id}/tweets"
               "?max_results=5"
@@ -53,13 +70,23 @@ jobs:
 
           tweets = result.get("data", [])
 
+          print("Recent posts retrieved:", len(tweets))
+
+
+          # ----------------------------------------
+          # FIND NEWEST POST WITH CLASH LINKS
+          # ----------------------------------------
+
           found = None
 
-          # Find newest post containing Clash layout links
           for tweet in tweets:
+
               clash_links = []
 
-              for url in tweet.get("entities", {}).get("urls", []):
+              entities = tweet.get("entities", {})
+
+              for url in entities.get("urls", []):
+
                   expanded = url.get("expanded_url", "")
                   unwound = url.get("unwound_url", "")
 
@@ -68,16 +95,26 @@ jobs:
                   if "link.clashofclans.com" in candidate:
                       clash_links.append(candidate)
 
-              # Also check URLs written directly in text
-              text = tweet.get("text", "")
 
               if clash_links:
                   found = (tweet, clash_links)
                   break
 
+
+          # ----------------------------------------
+          # NOTHING FOUND
+          # ----------------------------------------
+
           if not found:
-              print("No Clash of Clans layout post found in latest 5 posts.")
+              print()
+              print("No Clash of Clans layout links found")
+              print("in JAGRUK's latest 5 posts.")
               raise SystemExit(0)
+
+
+          # ----------------------------------------
+          # PREPARE DISCORD MESSAGE
+          # ----------------------------------------
 
           tweet, links = found
 
@@ -87,48 +124,122 @@ jobs:
           tweet_id = tweet["id"]
           text = tweet.get("text", "").strip()
 
-          # Keep the first useful line as the release title
           lines = [
               line.strip()
               for line in text.splitlines()
               if line.strip()
           ]
 
-          title = lines[0] if lines else "New JAGRUK Free Bases"
+          if lines:
+              release_title = lines[0]
+          else:
+              release_title = "New JAGRUK Free Bases"
 
-          # Discord message
+
           message = (
-              ":european_castle: **New Free Bases — JAGRUK**\n\n"
-              f"**{title}**\n\n"
+              "🏰 **New Free Bases — JAGRUK**\n\n"
+              f"**{release_title}**\n\n"
           )
 
-          for i, link in enumerate(links, 1):
-              message += f"**Base {i}:** {link}\n"
+
+          for number, link in enumerate(links, 1):
+              message += (
+                  f"**Base {number}:** "
+                  f"{link}\n"
+              )
+
 
           message += (
               "\n"
-              f"**Original post:** https://x.com/jagruk00/status/{tweet_id}"
+              "**Original X post:**\n"
+              f"https://x.com/jagruk00/status/{tweet_id}"
           )
+
+
+          print()
+          print("Release found:", release_title)
+          print("Number of Clash links:", len(links))
+          print("Tweet ID:", tweet_id)
+
+
+          # ----------------------------------------
+          # SEND TO DISCORD
+          # ----------------------------------------
 
           payload = {
               "username": "Free Base Feed",
               "content": message
           }
 
-          data = json.dumps(payload).encode()
+          data = json.dumps(payload).encode("utf-8")
+
+
+          # Add wait=true so Discord returns a response
+          separator = "&" if "?" in WEBHOOK else "?"
+          discord_url = WEBHOOK + separator + "wait=true"
+
 
           req = urllib.request.Request(
-              WEBHOOK,
+              discord_url,
               data=data,
-              headers={"Content-Type": "application/json"},
+              headers={
+                  "Content-Type": "application/json",
+                  "User-Agent":
+                      "DiscordBot (https://github.com/Waz001/coc-free-base-feed, 1.0)"
+              },
               method="POST"
           )
 
-          with urllib.request.urlopen(req, timeout=30) as r:
-              print("Discord response:", r.status)
 
           print()
+          print("Sending release to Discord...")
+
+
+          try:
+
+              with urllib.request.urlopen(
+                  req,
+                  timeout=30
+              ) as response:
+
+                  print(
+                      "Discord response:",
+                      response.status
+                  )
+
+                  print(
+                      "SUCCESS: Discord accepted the message."
+                  )
+
+
+          except urllib.error.HTTPError as error:
+
+              print()
+              print(
+                  "DISCORD HTTP ERROR:",
+                  error.code
+              )
+
+              error_body = error.read().decode(
+                  "utf-8",
+                  errors="ignore"
+              )
+
+              print("Discord response:")
+              print(error_body)
+
+              raise
+
+
+          # ----------------------------------------
+          # FINISHED
+          # ----------------------------------------
+
+          print()
+          print("==============================")
           print("SUCCESS")
-          print("Posted JAGRUK release:", tweet_id)
-          print("Clash links:", len(links))
+          print("==============================")
+          print("JAGRUK post:", tweet_id)
+          print("Clash links posted:", len(links))
+
           PY
