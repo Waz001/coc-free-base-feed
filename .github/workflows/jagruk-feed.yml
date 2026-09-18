@@ -382,7 +382,7 @@ jobs:
 
               message += (
                   "🔗 **Original X post:** "
-                  f"<{original_url}>"
+                  f"{original_url}"
               )
 
 
